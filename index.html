@@ -280,7 +280,7 @@
     <div class="warn-banner" id="warnBanner">
       <div class="wtitle">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-        注意：この患者について「今後報告不要」の医師コメントがあります
+        注意：この患者の同様のアラートについて「今後報告不要」の医師コメントがあります
       </div>
       <ul id="warnList"></ul>
     </div>
@@ -659,7 +659,7 @@ function buildDetail(a){
 
       <label class="chk-row">
         <input type="checkbox" class="suppressChk" ${a.suppressFuture ? "checked" : ""}>
-        今後、この患者のアラートは報告不要とする
+        今後、この患者の同様のアラートは報告不要とする
       </label>
 
       <label class="chk-row">
@@ -749,13 +749,13 @@ function buildDetail(a){
     a.emrCompletedBy = emrCompletedBy;
     a.emrCompletedAt = emrCompleted ? (a.emrCompletedAt || new Date().toISOString()) : null;
 
-    // overall confirmed status: EMR-pending items stay unconfirmed until ME finishes
+    // overall confirmed status: EMR-pending items stay unconfirmed until ME finishes,
+    // otherwise the doctor-confirmed checkbox is authoritative (so unchecking it
+    // always sends the alert back to "未確認")
     if(emrRequested && !emrCompleted){
       a.confirmed = false;
-    } else if(doctorConfirmed || emrCompleted){
-      a.confirmed = true;
     } else {
-      a.confirmed = false;
+      a.confirmed = doctorConfirmed;
     }
     a.confirmedAt = new Date().toISOString();
 
@@ -871,7 +871,7 @@ document.getElementById("submitBtn").addEventListener("click", async ()=>{
     renderWarning(matches);
     if(matches.length > 0){
       const proceed = confirm(
-        "この患者については、医師から「今後報告不要」とコメントされています。\n" +
+        "この患者の同様のアラートについては、医師から「今後報告不要」とコメントされています。\n" +
         "それでも登録しますか？"
       );
       if(!proceed) return;

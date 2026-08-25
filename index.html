@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ペースメーカ遠隔モニタリング アラート報告</title>
+<style>
+  :root{
+    --bg: #f3f6f7;
+    --panel: #ffffff;
+    --ink: #16323a;
+    --ink-soft: #4d6a70;
+    --line: #dbe6e8;
+    --teal: #0f6e6e;
+    --teal-dark: #0a4f4f;
+    --teal-soft: #e3f1ef;
+    --amber: #b5760a;
+    --amber-bg: #fdf3e2;
+    --amber-line: #eecd93;
+    --ok: #2f7d4f;
+    --radius: 10px;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
+    line-height:1.6;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding:24px 18px 80px;}
+
+  header.top{
+    display:flex; align-items:center; justify-content:space-between; gap:14px;
+    padding-bottom:16px; margin-bottom:18px; border-bottom:2px solid var(--teal-dark); flex-wrap:wrap;
+  }
+  header.top .title-block{display:flex; align-items:center; gap:12px;}
+  header.top .mark{
+    width:36px;height:36px;border-radius:8px;background:var(--teal-dark);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex:none;
+  }
+  header.top h1{font-size:17px; margin:0; font-weight:700; letter-spacing:.01em;}
+  header.top .sub{font-size:11.5px; color:var(--ink-soft); margin-top:1px;}
+
+  button{
+    font-family:inherit; font-size:13px; font-weight:700; border-radius:7px; cursor:pointer;
+    border:1px solid transparent; padding:10px 18px; transition:.15s ease;
+  }
+  button.primary{background:var(--teal-dark); color:#fff;}
+  button.primary:hover{background:#083c3c;}
+  button.ghost{background:#fff; border-color:var(--line); color:var(--ink-soft);}
+  button.ghost:hover{border-color:var(--teal); color:var(--teal-dark);}
+  button:disabled{opacity:.5; cursor:not-allowed;}
+  .addBtn{display:flex; align-items:center; gap:6px; white-space:nowrap;}
+  #refreshBtn{display:flex; align-items:center; justify-content:center; padding:10px; width:38px;}
+
+  /* status tabs */
+  .tabs{display:flex; gap:8px; margin-bottom:16px;}
+  .tabs button{
+    flex:1; background:#fff; border:1px solid var(--line); color:var(--ink-soft);
+    padding:10px 8px; font-size:13px; border-radius:8px;
+  }
+  .tabs button b{font-family:var(--mono); margin-left:4px;}
+  .tabs button.active{background:var(--teal-dark); border-color:var(--teal-dark); color:#fff;}
+
+  /* list */
+  .cards{display:flex; flex-direction:column; gap:10px;}
+  .card{
+    border:1px solid var(--line); border-radius:9px; background:#fff; overflow:hidden;
+    transition: filter .2s ease, opacity .2s ease;
+  }
+  .card.dimmed{filter:blur(1.5px); opacity:.5;}
+  .card.dimmed:hover{filter:blur(0); opacity:1;}
+  .card-row{
+    display:grid; grid-template-columns:96px 110px 1fr auto auto; gap:12px; align-items:center;
+    padding:13px 16px; cursor:pointer; position:relative;
+  }
+  .card-row::before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--line);}
+  .card.pending .card-row::before{background:var(--amber);}
+  .card.awaiting .card-row::before{background:#6a5acd;}
+  .card.confirmed .card-row::before{background:var(--ok);}
+  .card-row:hover{background:#fafcfc;}
+  .c-date{font-size:11.5px; color:var(--ink-soft); font-family:var(--mono);}
+  .c-pid{font-size:12.5px; color:var(--ink-soft); font-family:var(--mono);}
+  .c-main{min-width:0;}
+  .c-name{font-size:14.5px; font-weight:700;}
+  .c-type{font-size:12.5px; color:var(--teal-dark); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .c-status{font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; white-space:nowrap;}
+  .c-status.pending{background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber-line);}
+  .c-status.awaiting{background:#ece9fb; color:#5b4bc4; border:1px solid #cfc6f0;}
+  .c-status.confirmed{background:#e6f4ea; color:var(--ok); border:1px solid #bfe3cb;}
+  .rowDeleteBtn{
+    background:none; border:none; padding:6px; color:#b3c0c2; cursor:pointer; border-radius:6px; line-height:0;
+  }
+  .rowDeleteBtn:hover{background:#fbe9e9; color:var(--danger, #ac3535);}
+
+  .detail{display:none; border-top:1px solid var(--line); padding:16px; background:#fbfdfd;}
+  .detail.open{display:block;}
+
+  .warn-banner{
+    background:var(--amber-bg); border:1px solid var(--amber-line); border-radius:8px;
+    padding:12px 14px; margin-bottom:14px; font-size:12.5px; color:#6b4a06; display:none;
+  }
+  .warn-banner.show{display:block;}
+  .warn-banner .wtitle{font-weight:700; display:flex; gap:7px; align-items:center; margin-bottom:5px; color:var(--amber);}
+  .warn-banner ul{margin:5px 0 0; padding-left:16px;}
+  .warn-banner li{margin-bottom:4px;}
+  .warn-banner .meta{color:#8a6a2a; font-size:10.5px;}
+
+  .detail-meta{display:grid; grid-template-columns:repeat(2,1fr); gap:8px 18px; font-size:13px; margin-bottom:12px;}
+  .detail-meta div span{display:block; font-size:11px; color:var(--ink-soft);}
+  .detail-meta div b{font-weight:600;}
+
+  .card-link{
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--teal-dark);
+    background:var(--teal-soft); border-radius:6px; padding:7px 12px; text-decoration:none; margin-bottom:14px;
+  }
+  .card-link:hover{background:#d3e9e6;}
+  .no-link{font-size:12px; color:#9aa9ab; display:block; margin-bottom:14px;}
+
+  .doc-box{border-top:1px dashed var(--line); padding-top:12px; display:flex; flex-direction:column; gap:12px;}
+  .doc-row{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap;}
+  .doc-row .chk{display:flex; align-items:center; gap:7px; font-size:13px; font-weight:600; white-space:nowrap;}
+  .doc-row .chk input{width:16px; height:16px;}
+  .doc-row textarea{
+    flex:1; min-width:200px; border:1px solid var(--line); border-radius:6px; padding:8px 10px; font-size:13px;
+    font-family:inherit; resize:vertical; min-height:38px; background:#fff;
+  }
+  .chk-row{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--ink); cursor:pointer;}
+  .chk-row input{width:16px; height:16px; flex:none;}
+  .confirm-block{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:var(--teal-soft);
+    border-radius:8px; padding:12px 14px;
+  }
+  .confirm-block .chk-row{font-size:15px; font-weight:700; color:var(--teal-dark);}
+  .confirm-block .chk-row input{width:19px; height:19px;}
+  .confirm-block input[type="text"]{
+    flex:1; min-width:160px; border:1px solid var(--line); border-radius:6px; padding:8px 10px; font-size:13px;
+    font-family:inherit; background:#fff;
+  }
+  .me-final-block{
+    background:var(--amber-bg); border:1px solid var(--amber-line); border-radius:8px; padding:12px 14px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .me-final-title{font-size:12px; font-weight:700; color:var(--amber);}
+  .me-final-block .chk-row{font-size:13px;}
+  .me-final-block input[type="text"]{
+    border:1px solid var(--amber-line); border-radius:6px; padding:8px 10px; font-size:13px;
+    font-family:inherit; background:#fff; width:100%; max-width:240px;
+  }
+  .suppress-chk{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft); margin-top:8px;}
+  .doc-foot{display:flex; justify-content:space-between; align-items:center; margin-top:10px; flex-wrap:wrap; gap:8px;}
+  .doc-foot .saved-at{font-size:11px; color:#8ba0a3;}
+
+  .empty{text-align:center; padding:40px 10px; color:var(--ink-soft); font-size:13px;}
+
+  .storage-banner{
+    display:flex; gap:12px; align-items:flex-start; background:var(--amber-bg); border:1px solid var(--amber-line);
+    border-radius:9px; padding:13px 16px; margin-bottom:18px; font-size:12.5px; color:#6b4a06;
+  }
+  .storage-banner svg{flex:none; margin-top:2px; color:var(--amber);}
+  .storage-banner #storageBannerText{flex:1;}
+  .storage-banner-btns{display:flex; gap:8px; flex:none; flex-wrap:wrap;}
+  .storage-banner-btns button{padding:7px 12px; font-size:12px;}
+
+  /* modal */
+  .modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(10,25,28,.45); z-index:50;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal{
+    background:#fff; border-radius:12px; width:100%; max-width:560px; max-height:90vh; overflow-y:auto;
+    padding:22px 24px 20px;
+  }
+  .modal h2{font-size:15px; margin:0 0 16px; color:var(--teal-dark); font-weight:700;}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:12px 14px;}
+  .field{display:flex; flex-direction:column; gap:5px;}
+  .field.span2{grid-column:span 2;}
+  .field label{font-size:12px; color:var(--ink-soft); font-weight:600;}
+  .field input, .field textarea{
+    border:1px solid var(--line); border-radius:6px; padding:9px 10px; font-size:14px;
+    font-family:inherit; color:var(--ink); background:#fbfdfd;
+  }
+  .field input:focus, .field textarea:focus{
+    outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(15,110,110,.12);
+  }
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:18px;}
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--teal-dark); color:#fff;
+    padding:10px 20px; border-radius:8px; font-size:13px; font-weight:600; box-shadow:0 8px 24px rgba(0,0,0,.18);
+    opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease; z-index:100;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(-4px);}
+
+  @media (max-width: 560px){
+    .card-row{grid-template-columns:1fr auto; row-gap:4px;}
+    .c-date, .c-pid{grid-column:1 / 2;}
+    .c-main{grid-column:1 / 3;}
+    .grid{grid-template-columns:1fr;}
+    .field.span2{grid-column:span 1;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="title-block">
+      <div class="mark">PM</div>
+      <div>
+        <h1>ペースメーカ遠隔アラート報告</h1>
+        <div class="sub">遠隔モニタリングのアラートを医師へ報告・確認するツール</div>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="ghost" id="refreshBtn" type="button" title="最新の状態に更新">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v6h-6"/></svg>
+      </button>
+      <button class="primary addBtn" id="openModalBtn" type="button" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg>
+        新規アラート登録
+      </button>
+    </div>
+  </header>
+
+  <div class="storage-banner" id="storageBanner" style="display:none;">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+    <div id="storageBannerText"></div>
+    <div class="storage-banner-btns" id="storageBannerBtns"></div>
+  </div>
+
+  <div class="tabs" id="statusFilter">
+    <button data-v="pending" type="button">未確認 <b id="tabPending">0</b></button>
+    <button data-v="confirmed" type="button">確認済 <b id="tabConfirmed">0</b></button>
+    <button data-v="all" type="button">すべて <b id="tabAll">0</b></button>
+  </div>
+
+  <div class="cards" id="cardList"></div>
+  <div class="empty" id="emptyState" style="display:none;">該当するアラートはありません</div>
+
+</div>
+
+<!-- 新規登録モーダル -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2>新規アラート登録</h2>
+    <div class="grid">
+      <div class="field">
+        <label>患者名 *</label>
+        <input type="text" id="fName">
+      </div>
+      <div class="field">
+        <label>患者ID *</label>
+        <input type="text" id="fPid">
+      </div>
+      <div class="field span2">
+        <label>アラート内容 *</label>
+        <input type="text" id="fType">
+      </div>
+      <div class="field span2">
+        <label>遠隔システムの患者ページURL</label>
+        <input type="url" id="fUrl">
+      </div>
+      <div class="field">
+        <label>登録日時</label>
+        <input type="datetime-local" id="fDate">
+      </div>
+      <div class="field">
+        <label>登録者名 *</label>
+        <input type="text" id="fReporter">
+      </div>
+      <div class="field span2">
+        <label>備考（任意）</label>
+        <input type="text" id="fNote">
+      </div>
+    </div>
+
+    <div class="warn-banner" id="warnBanner">
+      <div class="wtitle">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+        注意：この患者について「今後報告不要」の医師コメントがあります
+      </div>
+      <ul id="warnList"></ul>
+    </div>
+
+    <div class="modal-actions">
+      <button class="ghost" id="cancelModalBtn" type="button">キャンセル</button>
+      <button class="primary" id="submitBtn" type="button">登録する</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY_PREFIX = "pm_alert:";
+let allAlerts = [];
+let statusFilter = "pending"; // opens on the "unconfirmed" tab by default
+let openCardId = null;
+
+// GitHub Pagesにアップロードする前に、下のGAS_URLに
+// デプロイしたGoogle Apps ScriptウェブアプリのURL（/exec で終わるもの）を入れてください。
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxYoWtxhU8b1qxLASWli8Nns6W4FG-phyoIecQ6vF3fnIO12T8XZF5Tj1u22Km3UOStsg/exec";
+
+// Storage backends, chosen automatically:
+// 1) "gas"        - Google Apps Script経由でGoogleスプレッドシートに保存。
+//                   全PC・院外からも同じデータが見える、共有の保存先。
+//                   合言葉（このブラウザに保存）が一致しないと読み書きできない。
+// 2) "needs-pass" - GAS_URLは設定済みだが、このブラウザに合言葉が未設定。
+// 3) "claude"     - window.storage、Claudeのアーティファクトプレビュー内でのみ
+//                   使用（GAS_URL未設定時の動作確認用。本番では使わない）。
+// 4) "local"      - localStorageのみ（GAS_URL未設定かつClaudeプレビュー外の
+//                   場合の最終フォールバック。ブラウザごとに独立するため、
+//                   本番運用では発生しないはず）。
+//
+// "needs-pass"のときにlocalへ黙って切り替えることはしない -
+// それをやると「PCによってデータが違う」問題が再発するため、
+// あえて操作をブロックして案内を出す。
+let storageMode = "checking";
+let hasClaudeStorage = !!(window.storage && typeof window.storage.set === "function");
+let storageDegraded = false; // used only for the claude-storage retry/fallback path
+let gasPass = null;
+const PASS_KEY = "pm_alert_gas_pass";
+
+function isGasConfigured(){
+  return typeof GAS_URL === "string" && GAS_URL.indexOf("http") === 0;
+}
+
+async function gasRequest(payload){
+  const res = await fetch(GAS_URL, {
+    method: "POST",
+    body: JSON.stringify(Object.assign({ pass: gasPass }, payload))
+  });
+  if(!res.ok) throw new Error("通信に失敗しました");
+  const j = await res.json();
+  if(j && j.ok === false){
+    const err = new Error(j.error === "unauthorized" ? "合言葉が正しくありません" : (j.error || "エラーが発生しました"));
+    err.unauthorized = (j.error === "unauthorized");
+    throw err;
+  }
+  return j;
+}
+
+function handleGasUnauthorized(){
+  localStorage.removeItem(PASS_KEY);
+  gasPass = null;
+  storageMode = "needs-pass";
+  renderStorageBanner();
+}
+
+// list()で取得した全件をキャッシュしておき、get()はそこから返す
+// (KEY_PREFIX+id 単位のget/set/delete/list というこのファイル全体の
+// ストレージ抽象はそのまま流用しつつ、通信回数は最小限にする)
+const gasBackend = {
+  _cache: new Map(),
+  async list(prefix){
+    const arr = await gasRequest({ action: "list" });
+    this._cache.clear();
+    const keys = [];
+    (Array.isArray(arr) ? arr : []).forEach(a=>{
+      if(!a || !a.id) return;
+      const key = prefix + a.id;
+      this._cache.set(key, JSON.stringify(a));
+      keys.push(key);
+    });
+    return { keys };
+  },
+  async get(key){
+    if(this._cache.has(key)) return { key, value: this._cache.get(key) };
+    throw new Error("not found");
+  },
+  async set(key, value){
+    const alert = JSON.parse(value);
+    await gasRequest({ action: "set", alert });
+    return { key, value };
+  },
+  async delete(key){
+    const id = key.slice(KEY_PREFIX.length);
+    await gasRequest({ action: "delete", id });
+    return { key, deleted: true };
+  }
+};
+
+const claudeBackend = {
+  set: (k,v) => window.storage.set(k, v, true),
+  get: (k) => window.storage.get(k, true),
+  delete: (k) => window.storage.delete(k, true),
+  list: (p) => window.storage.list(p, true)
+};
+const localBackend = {
+  async set(key, value){
+    try{ localStorage.setItem(key, value); return {key, value}; }
+    catch(e){ console.error("localStorage set failed", e); return null; }
+  },
+  async get(key){
+    const v = localStorage.getItem(key);
+    if(v === null) throw new Error("not found");
+    return {key, value: v};
+  },
+  async delete(key){
+    localStorage.removeItem(key);
+    return {key, deleted: true};
+  },
+  async list(prefix){
+    return {keys: Object.keys(localStorage).filter(k => k.startsWith(prefix))};
+  }
+};
+
+async function withRetry(fn, retries = 1){
+  try{
+    return await fn();
+  }catch(e){
+    if(retries > 0){
+      await new Promise(r => setTimeout(r, 400));
+      return withRetry(fn, retries - 1);
+    }
+    throw e;
+  }
+}
+
+function notReadyError(){
+  return new Error("データの保存先の準備ができていません。上部の案内に従ってください");
+}
+
+const storage = {
+  async set(k,v){
+    if(storageMode === "gas"){
+      try{ return await gasBackend.set(k,v); }
+      catch(e){ if(e.unauthorized) handleGasUnauthorized(); throw e; }
+    }
+    if(storageMode === "needs-pass") throw notReadyError();
+    if(storageMode === "claude" && !storageDegraded){
+      try{ return await withRetry(() => claudeBackend.set(k,v)); }
+      catch(e){ degradeToLocal(e); return localBackend.set(k,v); }
+    }
+    return localBackend.set(k,v);
+  },
+  async get(k){
+    if(storageMode === "gas"){
+      try{ return await gasBackend.get(k); }
+      catch(e){ if(e.unauthorized) handleGasUnauthorized(); throw e; }
+    }
+    if(storageMode === "needs-pass") throw notReadyError();
+    if(storageMode === "claude" && !storageDegraded){
+      try{ return await withRetry(() => claudeBackend.get(k)); }
+      catch(e){ if(storageDegraded) return localBackend.get(k); throw e; }
+    }
+    return localBackend.get(k);
+  },
+  async delete(k){
+    if(storageMode === "gas"){
+      try{ return await gasBackend.delete(k); }
+      catch(e){ if(e.unauthorized) handleGasUnauthorized(); throw e; }
+    }
+    if(storageMode === "needs-pass") throw notReadyError();
+    if(storageMode === "claude" && !storageDegraded){
+      try{ return await withRetry(() => claudeBackend.delete(k)); }
+      catch(e){ degradeToLocal(e); return localBackend.delete(k); }
+    }
+    return localBackend.delete(k);
+  },
+  async list(p){
+    if(storageMode === "gas"){
+      try{ return await gasBackend.list(p); }
+      catch(e){ if(e.unauthorized) handleGasUnauthorized(); throw e; }
+    }
+    if(storageMode === "needs-pass") throw notReadyError();
+    if(storageMode === "claude" && !storageDegraded){
+      try{ return await withRetry(() => claudeBackend.list(p)); }
+      catch(e){ degradeToLocal(e); return localBackend.list(p); }
+    }
+    return localBackend.list(p);
+  }
+};
+
+function degradeToLocal(err){
+  console.error("Claudeストレージへの接続に失敗したため、ブラウザ内保存に切り替えます", err);
+  if(!storageDegraded){
+    storageDegraded = true;
+    showToast("保存サービスに接続できないため、一時的にこのブラウザ内保存に切り替えました");
+    if(typeof renderStorageBanner === "function") renderStorageBanner();
+  }
+}
+
+
+function uid(){
+  return "a" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+}
+function nowLocalInputValue(){
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0,16);
+}
+function fmtDate(iso){
+  if(!iso) return "-";
+  const d = new Date(iso);
+  if(isNaN(d)) return iso;
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function fmtDateShort(iso){
+  if(!iso) return "-";
+  const d = new Date(iso);
+  if(isNaN(d)) return iso;
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())}`;
+}
+function esc(s){
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 2200);
+}
+
+async function loadAll(){
+  try{
+    const res = await storage.list(KEY_PREFIX);
+    const keys = res && res.keys ? res.keys : [];
+    const items = [];
+    for(const k of keys){
+      try{
+        const r = await storage.get(k);
+        if(r && r.value) items.push(JSON.parse(r.value));
+      }catch(e){ /* skip unreadable entries */ }
+    }
+    items.sort((a,b) => (b.registeredAt||"").localeCompare(a.registeredAt||""));
+    allAlerts = items;
+  }catch(e){
+    allAlerts = [];
+    console.error("一覧の読み込みに失敗しました", e);
+  }
+  renderAll();
+}
+
+async function saveAlert(alert){
+  const result = await storage.set(KEY_PREFIX + alert.id, JSON.stringify(alert));
+  if(!result) throw new Error("storage.set returned null");
+}
+
+async function deleteAlert(a){
+  const ok = confirm(`「${a.name}」（ID: ${a.pid}）のアラートを削除します。この操作は取り消せません。よろしいですか？`);
+  if(!ok) return;
+  try{
+    await storage.delete(KEY_PREFIX + a.id);
+    if(openCardId === a.id) openCardId = null;
+    showToast("アラートを削除しました");
+    await loadAll();
+  }catch(e){
+    console.error(e);
+    showToast("削除に失敗しました：" + (e && e.message ? e.message : "不明なエラー"));
+  }
+}
+
+function renderTabs(){
+  const total = allAlerts.length;
+  const confirmed = allAlerts.filter(a => a.confirmed).length;
+  document.getElementById("tabAll").textContent = total;
+  document.getElementById("tabConfirmed").textContent = confirmed;
+  document.getElementById("tabPending").textContent = total - confirmed;
+}
+
+function renderAll(){
+  renderTabs();
+
+  let list = allAlerts.filter(a=>{
+    if(statusFilter === "pending" && a.confirmed) return false;
+    if(statusFilter === "confirmed" && !a.confirmed) return false;
+    return true;
+  });
+
+  const container = document.getElementById("cardList");
+  const empty = document.getElementById("emptyState");
+  container.innerHTML = "";
+
+  if(list.length === 0){
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+
+  for(const a of list){
+    container.appendChild(buildCard(a));
+  }
+}
+
+function getStatusInfo(a){
+  if(a.emrRequested && !a.emrCompleted) return {cls: "awaiting", label: "カルテ保存待ち"};
+  if(a.confirmed) return {cls: "confirmed", label: "確認済"};
+  return {cls: "pending", label: "未確認"};
+}
+
+function buildCard(a){
+  const status = getStatusInfo(a);
+  const wrap = document.createElement("div");
+  const isDimmed = openCardId !== null && openCardId !== a.id;
+  wrap.className = "card " + status.cls + (isDimmed ? " dimmed" : "");
+  wrap.dataset.id = a.id;
+
+  const row = document.createElement("div");
+  row.className = "card-row";
+  row.innerHTML = `
+    <div class="c-date">${fmtDateShort(a.registeredAt)}</div>
+    <div class="c-pid">${esc(a.pid)}</div>
+    <div class="c-main">
+      <div class="c-name">${esc(a.name)}</div>
+      <div class="c-type">${esc(a.type || "-")}</div>
+    </div>
+    <div class="c-status ${status.cls}">${status.label}</div>
+    <button class="rowDeleteBtn" type="button" title="このアラートを削除" aria-label="削除">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+    </button>
+  `;
+  row.querySelector(".rowDeleteBtn").addEventListener("click", async (e)=>{
+    e.stopPropagation();
+    await deleteAlert(a);
+  });
+  row.addEventListener("click", ()=>{
+    openCardId = (openCardId === a.id) ? null : a.id;
+    renderAll();
+  });
+  wrap.appendChild(row);
+
+  if(openCardId === a.id){
+    wrap.appendChild(buildDetail(a));
+  }
+  return wrap;
+}
+
+function buildDetail(a){
+  const det = document.createElement("div");
+  det.className = "detail open";
+
+  const linkHtml = a.url
+    ? `<a class="card-link" href="${esc(a.url)}" target="_blank" rel="noopener">
+         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6"/></svg>
+         遠隔システムで患者ページを開く
+       </a>`
+    : `<span class="no-link">遠隔システムのURL未登録</span>`;
+
+  det.innerHTML = `
+    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+      <button class="ghost editRegBtn" type="button" style="padding:6px 12px;font-size:12px;">登録内容を編集</button>
+    </div>
+    <div class="detail-meta">
+      <div><span>登録者</span><b>${esc(a.reporter)}</b></div>
+      <div><span>登録日時</span><b>${fmtDate(a.registeredAt)}</b></div>
+      ${a.note ? `<div style="grid-column:1/3;"><span>備考</span><b>${esc(a.note)}</b></div>` : ""}
+    </div>
+    ${linkHtml}
+    <div class="doc-box">
+      <div class="doc-row">
+        <textarea class="commentBox" rows="2" placeholder="医師コメントを入力">${esc(a.comment || "")}</textarea>
+      </div>
+
+      <label class="chk-row">
+        <input type="checkbox" class="suppressChk" ${a.suppressFuture ? "checked" : ""}>
+        今後、この患者のアラートは報告不要とする
+      </label>
+
+      <label class="chk-row">
+        <input type="checkbox" class="emrChk" ${a.emrRequested ? "checked" : ""}>
+        電子カルテへ保存が必要
+      </label>
+
+      <div class="confirm-block">
+        <label class="chk-row">
+          <input type="checkbox" class="confirmChk" ${a.doctorConfirmed ? "checked" : ""}>
+          医師確認済み
+        </label>
+        <input type="text" class="confirmerName" placeholder="医師氏名" value="${esc(a.doctorName || "")}">
+      </div>
+
+      ${(a.emrRequested && !a.emrCompleted) ? `
+      <div class="me-final-block">
+        <div class="me-final-title">ME：電子カルテ保存の最終処理</div>
+        <label class="chk-row">
+          <input type="checkbox" class="emrCompleteChk">
+          電子カルテ保存 完了
+        </label>
+        <input type="text" class="emrCompletedByInput" placeholder="ME担当者名">
+      </div>
+      ` : ""}
+
+      <div class="doc-foot">
+        <span class="saved-at">${a.confirmedAt ? "最終更新: " + fmtDate(a.confirmedAt) : ""}</span>
+        <div style="display:flex; gap:8px;">
+          <button class="ghost deleteBtn" type="button" style="padding:7px 14px;font-size:12px;color:#ac3535;border-color:#f0cccc;">このアラートを削除</button>
+          <button class="primary saveDocBtn" type="button" style="padding:7px 16px;font-size:12px;">保存</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  det.querySelector(".editRegBtn").addEventListener("click", ()=>{
+    openModal(a);
+  });
+
+  det.querySelector(".deleteBtn").addEventListener("click", async ()=>{
+    await deleteAlert(a);
+  });
+
+  // checking "報告不要" or "電子カルテへ保存が必要" implies the doctor is
+  // the one making that call, so auto-check "医師確認済み" too.
+  const autoCheckConfirm = () => { det.querySelector(".confirmChk").checked = true; };
+  det.querySelector(".suppressChk").addEventListener("change", (e)=>{ if(e.target.checked) autoCheckConfirm(); });
+  det.querySelector(".emrChk").addEventListener("change", (e)=>{ if(e.target.checked) autoCheckConfirm(); });
+
+  det.querySelector(".saveDocBtn").addEventListener("click", async ()=>{
+    const comment = det.querySelector(".commentBox").value.trim();
+    const suppressFuture = det.querySelector(".suppressChk").checked;
+    const emrRequested = det.querySelector(".emrChk").checked;
+    const doctorConfirmed = det.querySelector(".confirmChk").checked;
+    const doctorName = det.querySelector(".confirmerName").value.trim();
+
+    if((suppressFuture || emrRequested) && !doctorConfirmed){
+      showToast("「報告不要」または「電子カルテへ保存が必要」にチェックする場合は、医師確認も必要です");
+      return;
+    }
+    if(doctorConfirmed && !doctorName){
+      showToast("医師氏名を入力してください");
+      return;
+    }
+
+    let emrCompleted = a.emrCompleted || false;
+    let emrCompletedBy = a.emrCompletedBy || "";
+    const emrCompleteChkEl = det.querySelector(".emrCompleteChk");
+    if(emrCompleteChkEl){
+      const emrCompleteChecked = emrCompleteChkEl.checked;
+      const emrCompletedByInput = det.querySelector(".emrCompletedByInput").value.trim();
+      if(emrCompleteChecked && !emrCompletedByInput){
+        showToast("ME担当者名を入力してください");
+        return;
+      }
+      emrCompleted = emrCompleteChecked;
+      emrCompletedBy = emrCompleteChecked ? emrCompletedByInput : emrCompletedBy;
+    }
+
+    a.comment = comment;
+    a.suppressFuture = suppressFuture;
+    a.emrRequested = emrRequested;
+    a.doctorConfirmed = doctorConfirmed;
+    a.doctorName = doctorName;
+    a.emrCompleted = emrCompleted;
+    a.emrCompletedBy = emrCompletedBy;
+    a.emrCompletedAt = emrCompleted ? (a.emrCompletedAt || new Date().toISOString()) : null;
+
+    // overall confirmed status: EMR-pending items stay unconfirmed until ME finishes
+    if(emrRequested && !emrCompleted){
+      a.confirmed = false;
+    } else if(doctorConfirmed || emrCompleted){
+      a.confirmed = true;
+    } else {
+      a.confirmed = false;
+    }
+    a.confirmedAt = new Date().toISOString();
+
+    await saveAlert(a);
+    showToast("保存しました");
+    openCardId = null;
+    await loadAll();
+  });
+
+  return det;
+}
+
+document.querySelectorAll("#statusFilter button").forEach(btn=>{
+  if(btn.dataset.v === statusFilter) btn.classList.add("active");
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll("#statusFilter button").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    statusFilter = btn.dataset.v;
+    openCardId = null;
+    renderAll();
+  });
+});
+
+// --- 新規登録／編集モーダル ---
+let editingAlertId = null;
+
+function openModal(alertToEdit){
+  editingAlertId = alertToEdit ? alertToEdit.id : null;
+
+  document.getElementById("fName").value = alertToEdit ? alertToEdit.name : "";
+  document.getElementById("fPid").value = alertToEdit ? alertToEdit.pid : "";
+  document.getElementById("fType").value = alertToEdit ? alertToEdit.type : "";
+  document.getElementById("fUrl").value = alertToEdit ? (alertToEdit.url || "") : "";
+  document.getElementById("fReporter").value = alertToEdit ? alertToEdit.reporter : "";
+  document.getElementById("fNote").value = alertToEdit ? (alertToEdit.note || "") : "";
+  document.getElementById("fDate").value = alertToEdit
+    ? (() => {
+        const d = new Date(alertToEdit.registeredAt);
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        return d.toISOString().slice(0,16);
+      })()
+    : nowLocalInputValue();
+
+  document.querySelector("#modalOverlay h2").textContent = alertToEdit ? "アラート情報を編集" : "新規アラート登録";
+  document.getElementById("submitBtn").textContent = alertToEdit ? "更新する" : "登録する";
+
+  renderWarning([]);
+  document.getElementById("modalOverlay").classList.add("show");
+  document.getElementById("fName").focus();
+}
+function closeModal(){
+  document.getElementById("modalOverlay").classList.remove("show");
+  editingAlertId = null;
+}
+document.getElementById("openModalBtn").addEventListener("click", ()=>openModal());
+document.getElementById("cancelModalBtn").addEventListener("click", closeModal);
+document.getElementById("modalOverlay").addEventListener("click", (e)=>{
+  if(e.target.id === "modalOverlay") closeModal();
+});
+
+function checkSuppressWarning(pid){
+  return allAlerts.filter(a =>
+    a.pid.trim().toLowerCase() === pid.trim().toLowerCase() &&
+    a.suppressFuture
+  );
+}
+function renderWarning(matches){
+  const banner = document.getElementById("warnBanner");
+  const list = document.getElementById("warnList");
+  if(matches.length === 0){
+    banner.classList.remove("show");
+    list.innerHTML = "";
+    return;
+  }
+  list.innerHTML = matches.map(m => `
+    <li>
+      <b>${esc(m.type || "内容未記載")}</b>（${fmtDate(m.registeredAt)} 登録・${esc(m.reporter)}）に対する医師コメント：
+      「${esc(m.comment || "(コメントなし)")}」
+      <div class="meta">確認: ${fmtDate(m.confirmedAt)}</div>
+    </li>
+  `).join("");
+  banner.classList.add("show");
+}
+document.getElementById("fPid").addEventListener("input", ()=>{
+  const pid = document.getElementById("fPid").value.trim();
+  renderWarning(pid ? checkSuppressWarning(pid) : []);
+});
+
+function collectFormAndValidate(){
+  const name = document.getElementById("fName").value.trim();
+  const pid = document.getElementById("fPid").value.trim();
+  const type = document.getElementById("fType").value.trim();
+  const url = document.getElementById("fUrl").value.trim();
+  const dateVal = document.getElementById("fDate").value;
+  const reporter = document.getElementById("fReporter").value.trim();
+  const note = document.getElementById("fNote").value.trim();
+
+  if(!name || !pid || !type || !reporter){
+    showToast("患者名・患者ID・アラート内容・登録者名は必須です");
+    return null;
+  }
+  const registeredAt = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+  return { name, pid, type, url, reporter, note, registeredAt };
+}
+
+document.getElementById("submitBtn").addEventListener("click", async ()=>{
+  const data = collectFormAndValidate();
+  if(!data) return;
+
+  if(!editingAlertId){
+    // only warn about suppress-comments for brand-new registrations
+    const matches = checkSuppressWarning(data.pid);
+    renderWarning(matches);
+    if(matches.length > 0){
+      const proceed = confirm(
+        "この患者については、医師から「今後報告不要」とコメントされています。\n" +
+        "それでも登録しますか？"
+      );
+      if(!proceed) return;
+    }
+  }
+
+  try{
+    if(editingAlertId){
+      const existing = allAlerts.find(a => a.id === editingAlertId);
+      if(!existing){
+        showToast("編集対象のアラートが見つかりませんでした");
+        return;
+      }
+      const updated = {
+        ...existing,
+        name: data.name,
+        pid: data.pid,
+        type: data.type,
+        url: data.url,
+        reporter: data.reporter,
+        note: data.note,
+        registeredAt: data.registeredAt
+      };
+      await saveAlert(updated);
+      showToast("登録内容を更新しました");
+    } else {
+      const alert = {
+        id: uid(),
+        name: data.name,
+        pid: data.pid,
+        type: data.type,
+        url: data.url,
+        reporter: data.reporter,
+        note: data.note,
+        registeredAt: data.registeredAt,
+        confirmed: false,
+        comment: "",
+        suppressFuture: false,
+        emrRequested: false,
+        doctorConfirmed: false,
+        doctorName: "",
+        emrCompleted: false,
+        emrCompletedBy: "",
+        emrCompletedAt: null,
+        confirmedAt: null
+      };
+      await saveAlert(alert);
+      showToast("アラートを登録しました");
+    }
+    closeModal();
+    await loadAll();
+  }catch(e){
+    console.error(e);
+    showToast("登録に失敗しました：" + (e && e.message ? e.message : "不明なエラー"));
+  }
+});
+
+// --- 保存先バナー ---
+function updateActionAvailability(){
+  const ready = (storageMode === "gas") || (storageMode === "claude" && !storageDegraded) || (storageMode === "local");
+  const btn = document.getElementById("openModalBtn");
+  if(btn) btn.disabled = !ready;
+}
+
+function makeBannerButton(label, onClick){
+  const btn = document.createElement("button");
+  btn.className = "primary";
+  btn.type = "button";
+  btn.textContent = label;
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+
+function renderStorageBanner(){
+  const banner = document.getElementById("storageBanner");
+  const textEl = document.getElementById("storageBannerText");
+  const btnsEl = document.getElementById("storageBannerBtns");
+  btnsEl.innerHTML = "";
+
+  if(storageMode === "gas" || (storageMode === "claude" && !storageDegraded)){
+    banner.style.display = "none";
+    updateActionAvailability();
+    return;
+  }
+
+  banner.style.display = "flex";
+
+  if(storageMode === "not-configured"){
+    textEl.textContent = "保存先が未設定です（GAS_URL）。開発担当に連絡してください。";
+  } else if(storageMode === "needs-pass"){
+    textEl.textContent = "このブラウザではまだ合言葉が設定されていません。入力してください。";
+    const input = document.createElement("input");
+    input.type = "password";
+    input.placeholder = "合言葉";
+    input.autocomplete = "off";
+    input.style.cssText = "padding:9px 10px; border-radius:8px; border:1px solid var(--line); font-size:14px; min-width:140px;";
+    const btn = makeBannerButton("設定する", async ()=>{
+      const v = input.value.trim();
+      if(!v) return;
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = "確認中...";
+      gasPass = v;
+      try{
+        await gasBackend.list(KEY_PREFIX);
+        localStorage.setItem(PASS_KEY, v);
+        storageMode = "gas";
+        renderStorageBanner();
+        await loadAll();
+      }catch(e){
+        gasPass = null;
+        showToast(e.message || "認証に失敗しました");
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    });
+    input.addEventListener("keydown", (ev)=>{ if(ev.key === "Enter") btn.click(); });
+    btnsEl.appendChild(input);
+    btnsEl.appendChild(btn);
+  } else if(!hasClaudeStorage){
+    textEl.textContent = "データの保存先に接続できないため、このブラウザ内にのみ一時的にデータが保存されています（他のPCとは共有されません）。";
+  } else {
+    textEl.textContent = "保存サービスに接続できないため、一時的にこのブラウザ内保存に切り替えています。";
+  }
+
+  updateActionAvailability();
+}
+
+// 詳細パネルや登録モーダルを開いていない間だけ、一定間隔でサーバーの
+// 最新データを読み直す。編集中に上書きしないよう配慮。
+function startAutoRefresh(){
+  setInterval(async ()=>{
+    if(storageMode !== "gas") return;
+    if(openCardId !== null) return;
+    const modal = document.getElementById("modalOverlay");
+    if(modal && modal.classList.contains("show")) return;
+    try{ await loadAll(); }catch(e){ /* エラー時はstorage層でバナー表示済み */ }
+  }, 20000);
+}
+
+document.getElementById("refreshBtn").addEventListener("click", async ()=>{
+  if(storageMode === "needs-pass" || storageMode === "not-configured"){
+    showToast("保存先の準備ができていません");
+    return;
+  }
+  await loadAll();
+  showToast("最新の状態に更新しました");
+});
+
+async function initStorage(){
+  if(!isGasConfigured()){
+    // GAS_URL未設定時のフォールバック（Claudeプレビューでの動作確認用。
+    // 本番運用ではGAS_URLを設定するため、通常ここには来ない）
+    storageMode = hasClaudeStorage ? "claude" : "local";
+    renderStorageBanner();
+    await loadAll();
+    return;
+  }
+  const saved = localStorage.getItem(PASS_KEY);
+  if(!saved){
+    storageMode = "needs-pass";
+    renderStorageBanner();
+    return;
+  }
+  gasPass = saved;
+  try{
+    await gasBackend.list(KEY_PREFIX);
+    storageMode = "gas";
+    renderStorageBanner();
+    await loadAll();
+  }catch(e){
+    localStorage.removeItem(PASS_KEY);
+    gasPass = null;
+    storageMode = "needs-pass";
+    renderStorageBanner();
+    showToast(e.message || "接続に失敗しました。合言葉を再入力してください");
+  }
+}
+
+(async function init(){
+  await initStorage();
+  startAutoRefresh();
+})();
+</script>
+</body>
+</html>

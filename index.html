@@ -185,6 +185,7 @@
   .field input:focus, .field textarea:focus{
     outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(15,110,110,.12);
   }
+  .field input.input-warn{border-color:var(--danger, #ac3535); background:#fdf3f3;}
   .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:18px;}
 
   .toast{
@@ -253,7 +254,7 @@
       </div>
       <div class="field">
         <label>患者ID *</label>
-        <input type="text" id="fPid">
+        <input type="text" id="fPid" maxlength="8" inputmode="numeric" placeholder="12345678">
       </div>
       <div class="field span2">
         <label>アラート内容 *</label>
@@ -543,7 +544,7 @@ async function saveAlert(alert){
 }
 
 async function deleteAlert(a){
-  const ok = confirm(`「${a.name}」（ID: ${a.pid}）のアラートを削除します。この操作は取り消せません。よろしいですか？`);
+  const ok = confirm(`「${a.name}」（ID: ${formatPid(a.pid)}）のアラートを削除します。この操作は取り消せません。よろしいですか？`);
   if(!ok) return;
   try{
     await storage.delete(KEY_PREFIX + a.id);
@@ -605,7 +606,7 @@ function buildCard(a){
   row.className = "card-row";
   row.innerHTML = `
     <div class="c-date">${fmtDateShort(a.registeredAt)}</div>
-    <div class="c-pid">${esc(a.pid)}</div>
+    <div class="c-pid">${esc(formatPid(a.pid))}</div>
     <div class="c-main">
       <div class="c-name">${esc(a.name)}</div>
       <div class="c-type">${esc(a.type || "-")}</div>
@@ -787,6 +788,7 @@ function openModal(alertToEdit){
 
   document.getElementById("fName").value = alertToEdit ? alertToEdit.name : "";
   document.getElementById("fPid").value = alertToEdit ? alertToEdit.pid : "";
+  document.getElementById("fPid").classList.remove("input-warn");
   document.getElementById("fType").value = alertToEdit ? alertToEdit.type : "";
   document.getElementById("fUrl").value = alertToEdit ? (alertToEdit.url || "") : "";
   document.getElementById("fReporter").value = alertToEdit ? alertToEdit.reporter : "";
@@ -817,8 +819,9 @@ document.getElementById("modalOverlay").addEventListener("click", (e)=>{
 });
 
 function checkSuppressWarning(pid){
+  const target = formatPid(pid);
   return allAlerts.filter(a =>
-    a.pid.trim().toLowerCase() === pid.trim().toLowerCase() &&
+    formatPid(a.pid) === target &&
     a.suppressFuture
   );
 }
@@ -839,10 +842,18 @@ function renderWarning(matches){
   `).join("");
   banner.classList.add("show");
 }
-document.getElementById("fPid").addEventListener("input", ()=>{
-  const pid = document.getElementById("fPid").value.trim();
+document.getElementById("fPid").addEventListener("input", (e)=>{
+  e.target.value = e.target.value.replace(/[^\d]/g, "").slice(0, 8);
+  const pid = e.target.value;
+  e.target.classList.toggle("input-warn", pid.length > 0 && pid.length < 8);
   renderWarning(pid ? checkSuppressWarning(pid) : []);
 });
+
+function formatPid(pid){
+  // 桁数不足の古いデータ表示用（新規入力は8桁数字で強制済み）
+  const s = (pid || "").trim();
+  return (/^\d+$/.test(s) && s.length < 8) ? s.padStart(8, "0") : s;
+}
 
 function collectFormAndValidate(){
   const name = document.getElementById("fName").value.trim();
@@ -855,6 +866,10 @@ function collectFormAndValidate(){
 
   if(!name || !pid || !type || !reporter){
     showToast("患者名・患者ID・アラート内容・登録者名は必須です");
+    return null;
+  }
+  if(!/^\d{8}$/.test(pid)){
+    showToast("患者IDは8桁の数字で入力してください（例：01234567）");
     return null;
   }
   const registeredAt = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();

@@ -186,7 +186,6 @@
   .field input:focus, .field textarea:focus{
     outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(15,110,110,.12);
   }
-  .field input.input-warn{border-color:var(--danger, #ac3535); background:#fdf3f3;}
   .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:18px;}
 
   .toast{
@@ -255,7 +254,7 @@
       </div>
       <div class="field">
         <label>患者ID *</label>
-        <input type="text" id="fPid" maxlength="8" inputmode="numeric" placeholder="12345678">
+        <input type="text" id="fPid" maxlength="8" inputmode="numeric">
       </div>
       <div class="field span2">
         <label>アラート内容 *</label>
@@ -306,7 +305,7 @@ let openCardId = null;
 // デプロイしたGoogle Apps ScriptウェブアプリのURL（/exec で終わるもの）を入れてください。
 // GitHubに上げた後、ページを開いてタイトル横の表示がこの番号になっていれば
 // 最新版が反映されている（キャッシュではない）ことが確認できます。
-const APP_VERSION = "v1.0";
+const APP_VERSION = "v1.1";
 {
   const verEl = document.getElementById("appVersion");
   if(verEl) verEl.textContent = APP_VERSION;
@@ -797,7 +796,6 @@ function openModal(alertToEdit){
 
   document.getElementById("fName").value = alertToEdit ? alertToEdit.name : "";
   document.getElementById("fPid").value = alertToEdit ? alertToEdit.pid : "";
-  document.getElementById("fPid").classList.remove("input-warn");
   document.getElementById("fType").value = alertToEdit ? alertToEdit.type : "";
   document.getElementById("fUrl").value = alertToEdit ? (alertToEdit.url || "") : "";
   document.getElementById("fReporter").value = alertToEdit ? alertToEdit.reporter : "";
@@ -854,19 +852,21 @@ function renderWarning(matches){
 document.getElementById("fPid").addEventListener("input", (e)=>{
   e.target.value = e.target.value.replace(/[^\d]/g, "").slice(0, 8);
   const pid = e.target.value;
-  e.target.classList.toggle("input-warn", pid.length > 0 && pid.length < 8);
   renderWarning(pid ? checkSuppressWarning(pid) : []);
+});
+document.getElementById("fPid").addEventListener("blur", (e)=>{
+  e.target.value = formatPid(e.target.value);
 });
 
 function formatPid(pid){
-  // 桁数不足の古いデータ表示用（新規入力は8桁数字で強制済み）
+  // 数字のみ・8桁未満なら先頭を0埋めして8桁に補完
   const s = (pid || "").trim();
   return (/^\d+$/.test(s) && s.length < 8) ? s.padStart(8, "0") : s;
 }
 
 function collectFormAndValidate(){
   const name = document.getElementById("fName").value.trim();
-  const pid = document.getElementById("fPid").value.trim();
+  const pid = formatPid(document.getElementById("fPid").value.trim());
   const type = document.getElementById("fType").value.trim();
   const url = document.getElementById("fUrl").value.trim();
   const dateVal = document.getElementById("fDate").value;
@@ -878,7 +878,7 @@ function collectFormAndValidate(){
     return null;
   }
   if(!/^\d{8}$/.test(pid)){
-    showToast("患者IDは8桁の数字で入力してください（例：01234567）");
+    showToast("患者IDは数字のみで入力してください（8桁未満は自動で0埋めされます）");
     return null;
   }
   const registeredAt = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();

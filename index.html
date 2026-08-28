@@ -40,6 +40,7 @@
     display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex:none;
   }
   header.top h1{font-size:17px; margin:0; font-weight:700; letter-spacing:.01em;}
+  .version-tag{font-size:11px; font-weight:500; color:var(--ink-soft); letter-spacing:0; font-family:var(--mono);}
   header.top .sub{font-size:11.5px; color:var(--ink-soft); margin-top:1px;}
 
   button{
@@ -211,7 +212,7 @@
     <div class="title-block">
       <div class="mark">PM</div>
       <div>
-        <h1>ペースメーカ遠隔アラート報告</h1>
+        <h1>ペースメーカ遠隔アラート報告 <span id="appVersion" class="version-tag"></span></h1>
         <div class="sub">遠隔モニタリングのアラートを医師へ報告・確認するツール</div>
       </div>
     </div>
@@ -303,6 +304,14 @@ let openCardId = null;
 
 // GitHub Pagesにアップロードする前に、下のGAS_URLに
 // デプロイしたGoogle Apps ScriptウェブアプリのURL（/exec で終わるもの）を入れてください。
+// GitHubに上げた後、ページを開いてタイトル横の表示がこの番号になっていれば
+// 最新版が反映されている（キャッシュではない）ことが確認できます。
+const APP_VERSION = "v1.0";
+{
+  const verEl = document.getElementById("appVersion");
+  if(verEl) verEl.textContent = APP_VERSION;
+}
+
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxYoWtxhU8b1qxLASWli8Nns6W4FG-phyoIecQ6vF3fnIO12T8XZF5Tj1u22Km3UOStsg/exec";
 
 // Storage backends, chosen automatically:

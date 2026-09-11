@@ -145,6 +145,11 @@
   }
   .me-final-title{font-size:12px; font-weight:700; color:var(--amber);}
   .me-final-block .chk-row{font-size:13px;}
+  .emr-history{
+    display:flex; align-items:center; gap:7px; font-size:12.5px; color:#2a7a4f;
+    background:#f1f9f4; border:1px solid #cdeada; border-radius:8px; padding:9px 12px;
+  }
+  .emr-history svg{flex-shrink:0; color:#2a7a4f;}
   .me-final-block input[type="text"]{
     border:1px solid var(--amber-line); border-radius:6px; padding:8px 10px; font-size:13px;
     font-family:inherit; background:#fff; width:100%; max-width:240px;
@@ -305,7 +310,7 @@ let openCardId = null;
 // デプロイしたGoogle Apps ScriptウェブアプリのURL（/exec で終わるもの）を入れてください。
 // GitHubに上げた後、ページを開いてタイトル横の表示がこの番号になっていれば
 // 最新版が反映されている（キャッシュではない）ことが確認できます。
-const APP_VERSION = "v1.1";
+const APP_VERSION = "v1.2";
 {
   const verEl = document.getElementById("appVersion");
   if(verEl) verEl.textContent = APP_VERSION;
@@ -695,6 +700,13 @@ function buildDetail(a){
       </div>
       ` : ""}
 
+      ${(a.emrRequested && a.emrCompleted) ? `
+      <div class="emr-history">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+        電子カルテ保存 完了済み　${esc(a.emrCompletedBy || "担当者未記録")}　${a.emrCompletedAt ? fmtDate(a.emrCompletedAt) : ""}
+      </div>
+      ` : ""}
+
       <div class="doc-foot">
         <span class="saved-at">${a.confirmedAt ? "最終更新: " + fmtDate(a.confirmedAt) : ""}</span>
         <div style="display:flex; gap:8px;">
@@ -735,10 +747,24 @@ function buildDetail(a){
       return;
     }
 
-    let emrCompleted = a.emrCompleted || false;
-    let emrCompletedBy = a.emrCompletedBy || "";
+    // 保存直前に最新の状態を取り直す。このカードを開いてから別のPCで
+    // 電子カルテ保存が完了していた場合、画面上の古い（未完了の）チェック状態で
+    // それを上書きしてしまわないようにするため。
+    let latest = a;
+    try{
+      await storage.list(KEY_PREFIX); // gasBackend.getはキャッシュのみ見るため、先に最新化する
+      const r = await storage.get(KEY_PREFIX + a.id);
+      latest = JSON.parse(r.value);
+    }catch(e){
+      // 取得できなければローカルの情報のまま進める
+    }
+
+    let emrCompleted = latest.emrCompleted || false;
+    let emrCompletedBy = latest.emrCompletedBy || "";
+    let emrCompletedAt = latest.emrCompletedAt || null;
     const emrCompleteChkEl = det.querySelector(".emrCompleteChk");
-    if(emrCompleteChkEl){
+    if(emrCompleteChkEl && !emrCompleted){
+      // 最新状態がまだ未完了の場合のみ、この画面でのチェック操作を反映する
       const emrCompleteChecked = emrCompleteChkEl.checked;
       const emrCompletedByInput = det.querySelector(".emrCompletedByInput").value.trim();
       if(emrCompleteChecked && !emrCompletedByInput){
@@ -747,6 +773,9 @@ function buildDetail(a){
       }
       emrCompleted = emrCompleteChecked;
       emrCompletedBy = emrCompleteChecked ? emrCompletedByInput : emrCompletedBy;
+      emrCompletedAt = emrCompleted ? new Date().toISOString() : null;
+    } else if(emrCompleted && emrCompleteChkEl){
+      showToast("この電子カルテ保存は、別の操作で既に完了済みになっていました");
     }
 
     a.comment = comment;
@@ -756,7 +785,7 @@ function buildDetail(a){
     a.doctorName = doctorName;
     a.emrCompleted = emrCompleted;
     a.emrCompletedBy = emrCompletedBy;
-    a.emrCompletedAt = emrCompleted ? (a.emrCompletedAt || new Date().toISOString()) : null;
+    a.emrCompletedAt = emrCompletedAt;
 
     // overall confirmed status: EMR-pending items stay unconfirmed until ME finishes,
     // otherwise the doctor-confirmed checkbox is authoritative (so unchecking it

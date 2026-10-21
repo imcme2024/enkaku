@@ -103,6 +103,9 @@
     padding:12px 14px; margin-bottom:14px; font-size:12.5px; color:#6b4a06; display:none;
   }
   .warn-banner.show{display:block;}
+  .field.warn-slot{display:none;}
+  .field.warn-slot.show{display:block;}
+  .field.warn-slot .warn-banner{margin-bottom:0;}
   .warn-banner .wtitle{font-weight:700; display:flex; gap:7px; align-items:center; margin-bottom:5px; color:var(--amber);}
   .warn-banner ul{margin:5px 0 0; padding-left:16px;}
   .warn-banner li{margin-bottom:4px;}
@@ -254,12 +257,21 @@
     <h2>新規アラート登録</h2>
     <div class="grid">
       <div class="field">
+        <label>患者ID *</label>
+        <input type="text" id="fPid" maxlength="8" inputmode="numeric">
+      </div>
+      <div class="field">
         <label>患者名 *</label>
         <input type="text" id="fName">
       </div>
-      <div class="field">
-        <label>患者ID *</label>
-        <input type="text" id="fPid" maxlength="8" inputmode="numeric">
+      <div class="field span2 warn-slot">
+        <div class="warn-banner" id="warnBanner">
+          <div class="wtitle">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+            注意：この患者の同様のアラートについて「今後報告不要」の医師コメントがあります
+          </div>
+          <ul id="warnList"></ul>
+        </div>
       </div>
       <div class="field span2">
         <label>アラート内容 *</label>
@@ -283,14 +295,6 @@
       </div>
     </div>
 
-    <div class="warn-banner" id="warnBanner">
-      <div class="wtitle">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-        注意：この患者の同様のアラートについて「今後報告不要」の医師コメントがあります
-      </div>
-      <ul id="warnList"></ul>
-    </div>
-
     <div class="modal-actions">
       <button class="ghost" id="cancelModalBtn" type="button">キャンセル</button>
       <button class="primary" id="submitBtn" type="button">登録する</button>
@@ -310,7 +314,7 @@ let openCardId = null;
 // デプロイしたGoogle Apps ScriptウェブアプリのURL（/exec で終わるもの）を入れてください。
 // GitHubに上げた後、ページを開いてタイトル横の表示がこの番号になっていれば
 // 最新版が反映されている（キャッシュではない）ことが確認できます。
-const APP_VERSION = "v1.2";
+const APP_VERSION = "v1.3";
 {
   const verEl = document.getElementById("appVersion");
   if(verEl) verEl.textContent = APP_VERSION;
@@ -840,9 +844,10 @@ function openModal(alertToEdit){
   document.querySelector("#modalOverlay h2").textContent = alertToEdit ? "アラート情報を編集" : "新規アラート登録";
   document.getElementById("submitBtn").textContent = alertToEdit ? "更新する" : "登録する";
 
+  nameAutoFilled = null;
   renderWarning([]);
   document.getElementById("modalOverlay").classList.add("show");
-  document.getElementById("fName").focus();
+  document.getElementById("fPid").focus();
 }
 function closeModal(){
   document.getElementById("modalOverlay").classList.remove("show");
@@ -864,11 +869,14 @@ function checkSuppressWarning(pid){
 function renderWarning(matches){
   const banner = document.getElementById("warnBanner");
   const list = document.getElementById("warnList");
+  const slot = banner.closest(".warn-slot");
   if(matches.length === 0){
     banner.classList.remove("show");
+    if(slot) slot.classList.remove("show");
     list.innerHTML = "";
     return;
   }
+  if(slot) slot.classList.add("show");
   list.innerHTML = matches.map(m => `
     <li>
       <b>${esc(m.type || "内容未記載")}</b>（${fmtDate(m.registeredAt)} 登録・${esc(m.reporter)}）に対する医師コメント：
@@ -878,13 +886,51 @@ function renderWarning(matches){
   `).join("");
   banner.classList.add("show");
 }
+// 自動入力した名前を覚えておく。ユーザーが手で直したら null にして、以後は上書きしない。
+let nameAutoFilled = null;
+
+// 患者IDが8桁そろったときだけ呼ぶ：報告不要の判定と、名前の自動入力
+function applyPidLookup(pid){
+  renderWarning(checkSuppressWarning(pid));
+
+  if(editingAlertId) return; // 編集中は名前を自動入力しない
+  const nameEl = document.getElementById("fName");
+  const canAutofill = nameEl.value.trim() === "" || nameEl.value === nameAutoFilled;
+  if(!canAutofill) return;
+
+  const same = allAlerts
+    .filter(a => formatPid(a.pid) === pid && a.name)
+    .sort((x, y) => new Date(y.registeredAt) - new Date(x.registeredAt));
+  if(same.length > 0){
+    nameEl.value = same[0].name;
+    nameAutoFilled = same[0].name;
+  } else if(nameEl.value === nameAutoFilled){
+    nameEl.value = "";
+    nameAutoFilled = null;
+  }
+}
+
+// 8桁未満の間は判定せず、バナーと自動入力した名前を消す
+function clearPidLookup(){
+  renderWarning([]);
+  const nameEl = document.getElementById("fName");
+  if(nameAutoFilled !== null && nameEl.value === nameAutoFilled){
+    nameEl.value = "";
+  }
+  nameAutoFilled = null;
+}
+
+document.getElementById("fName").addEventListener("input", ()=>{ nameAutoFilled = null; });
 document.getElementById("fPid").addEventListener("input", (e)=>{
   e.target.value = e.target.value.replace(/[^\d]/g, "").slice(0, 8);
   const pid = e.target.value;
-  renderWarning(pid ? checkSuppressWarning(pid) : []);
+  if(pid.length === 8) applyPidLookup(pid);
+  else clearPidLookup();
 });
 document.getElementById("fPid").addEventListener("blur", (e)=>{
   e.target.value = formatPid(e.target.value);
+  // 0埋めで8桁になった場合もここで判定
+  if(/^\d{8}$/.test(e.target.value)) applyPidLookup(e.target.value);
 });
 
 function formatPid(pid){
